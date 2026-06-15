@@ -10,6 +10,9 @@
 #define max(x, y) ((x) > (y) ? (x) : (y))
 #define exec(s) if (fork() == 0) {execl("/bin/sh", "sh", "-c", s, 0); _exit(1);}
 
+#define lengthof(x) (sizeof x / sizeof x[0])
+#define NumlockMask Mod2Mask
+
 Display *dis;
 int scr;
 
@@ -40,6 +43,30 @@ void checkwm(void)
 	XSync(dis, False);
 }
 
+void keyhook(void)
+{
+	unsigned int nullmod[] = {0, LockMask, NumlockMask, NumlockMask | LockMask};
+	
+	for (int i=0; i<lengthof(nullmod); i++)
+	{
+		// hook alt-escape
+		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("Escape")),
+				 Mod1Mask | nullmod[i], DefaultRootWindow(dis), True,
+				 GrabModeAsync, GrabModeAsync);
+		// hook alt-r
+		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("r")),
+				 Mod1Mask | nullmod[i], DefaultRootWindow(dis), True,
+				 GrabModeAsync, GrabModeAsync);
+	}
+
+	XGrabButton(dis, 1, Mod1Mask, DefaultRootWindow(dis), True,
+				ButtonPressMask|ButtonReleaseMask|PointerMotionMask,
+				GrabModeAsync, GrabModeAsync, None, None);
+	XGrabButton(dis, 3, Mod1Mask, DefaultRootWindow(dis), True,
+				ButtonPressMask|ButtonReleaseMask|PointerMotionMask,
+				GrabModeAsync, GrabModeAsync, None, None);
+}
+
 int main(int argc, char *argv[])
 {
 	if (!(dis = XOpenDisplay(0x0)))
@@ -61,19 +88,7 @@ int main(int argc, char *argv[])
 		XSelectInput(dis, children[i], EnterWindowMask);
 	}
 
-	// hook alt-escape
-	XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("Escape")), Mod1Mask,
-			 DefaultRootWindow(dis), True, GrabModeAsync, GrabModeAsync);
-	// hook alt-r
-	XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("r")), Mod1Mask,
-			 DefaultRootWindow(dis), True, GrabModeAsync, GrabModeAsync);
-
-	XGrabButton(dis, 1, Mod1Mask, DefaultRootWindow(dis), True,
-				ButtonPressMask|ButtonReleaseMask|PointerMotionMask,
-				GrabModeAsync, GrabModeAsync, None, None);
-	XGrabButton(dis, 3, Mod1Mask, DefaultRootWindow(dis), True,
-				ButtonPressMask|ButtonReleaseMask|PointerMotionMask,
-				GrabModeAsync, GrabModeAsync, None, None);
+	keyhook();
 
 	s.subwindow = None;
 	for(;;)
