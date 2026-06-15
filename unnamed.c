@@ -25,19 +25,41 @@ int err(Display *d, XErrorEvent *e)
 	return 1;
 }
 
+int otherwmerr(Display *d, XErrorEvent *e)
+{
+	suicide("there's already a wm running.\n");
+	exit(1);
+}
+
+void checkwm(void)
+{
+	XSetErrorHandler(otherwmerr);
+	// if this fails, there's already a WM running
+	XSelectInput(dis, DefaultRootWindow(dis),
+				 SubstructureRedirectMask | SubstructureNotifyMask);
+	XSync(dis, False);
+}
+
 int main(int argc, char *argv[])
 {
 	if (!(dis = XOpenDisplay(0x0)))
-	{
-		fprintf(stderr, "failed to connect to X\n");
-		return 1;
-	}
+		suicide("failed to connect to X\n");
+
+	checkwm();
 
 	XSetErrorHandler(err);
 	scr = DefaultScreen(dis);
 	XButtonEvent s;
 	XEvent e;
 	XWindowAttributes atts;
+	Window root, parent, *children;
+	unsigned int n;
+
+	XQueryTree(dis, DefaultRootWindow(dis), &root, &parent, &children, &n);
+	
+	for (unsigned int i=0; i<n; i++) {
+		XSelectInput(dis, children[i], EnterWindowMask);
+	}
 
 	// hook alt-escape
 	XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("Escape")), Mod1Mask,
@@ -70,11 +92,11 @@ int main(int argc, char *argv[])
 				break;
 			}
 			break;
+		}
 		case ButtonPress:
 			XGetWindowAttributes(dis, e.xbutton.subwindow, &atts);
 			s = e.xbutton;
 			break;
-		}
 		case MotionNotify:
 			// compress motion events to most recent one
 			while(XCheckTypedEvent(dis, MotionNotify, &e));
@@ -89,7 +111,23 @@ int main(int argc, char *argv[])
 		case ButtonRelease:
 			s.subwindow = None;
 			break;
+		case MapRequest:
+			XSelectInput(dis, e.xmaprequest.window, EnterWindowMask);
+			XMapWindow(dis, e.xmaprequest.window);
+			break;
+		case EnterNotify: {
+			// compress enter notify events to mose recent one
+			while(XCheckTypedEvent(dis, EnterNotify, &e));
+			XCrossingEvent *v = &e.xcrossing;
+			if (v->mode != NotifyNormal)
+				break;
+			if (v->detail == NotifyInferior)
+				break;
+			XSetInputFocus(dis, v->window, RevertToPointerRoot, CurrentTime);
+			break;
 		}
+		}
+		
 	}
 
 	return 0;
