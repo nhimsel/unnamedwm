@@ -172,7 +172,15 @@ int main(int argc, char *argv[])
 				break;
 			if (v->detail == NotifyInferior)
 				break;
+
+			if (v->window == DefaultRootWindow(dis)) break;
+
+			XRaiseWindow(dis, v->window);
 			XSetInputFocus(dis, v->window, RevertToPointerRoot, CurrentTime);
+#ifdef DEBUG
+			fprintf(stdout, "raise 0x%lx\n", v->window);
+			fflush(stdout);
+#endif
 			break;
 		}
 		case KeyPress: {
@@ -190,6 +198,7 @@ int main(int argc, char *argv[])
 		}
 		case MapRequest:
 			XMapWindow(dis, e.xmaprequest.window);
+			XSelectInput(dis, e.xmaprequest.window, EnterWindowMask);
 			break;
 		case MotionNotify:
 			// compress motion events to most recent one
