@@ -152,6 +152,18 @@ int main(int argc, char *argv[])
 		case ButtonRelease:
 			s.subwindow = None;
 			break;
+		case ConfigureRequest: {
+			XConfigureRequestEvent xcr = e.xconfigurerequest;
+			XWindowChanges cc;
+			cc.x = xcr.x;
+			cc.y = xcr.y;
+			cc.width = xcr.width;
+			cc.height = xcr.height;
+			cc.border_width = xcr.border_width;
+			cc.sibling = xcr.above;
+			cc.stack_mode = xcr.detail;
+			XConfigureWindow(dis, xcr.window, xcr.value_mask, &cc);
+		}
 		case EnterNotify: {
 			// compress enter notify events to mose recent one
 			while(XCheckTypedEvent(dis, EnterNotify, &e));
