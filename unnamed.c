@@ -15,9 +15,18 @@
 #define NumlockMask Mod2Mask
 
 typedef void (*eventhandler)(XEvent *);
+typedef struct client
+{
+	Window w;
+	struct client *n;
+	struct client *p;
+} client;
 
-Display *dis;
-int scr;
+Display *dis = NULL;
+int scr = 0;
+client *chead = NULL;
+client *ctail = NULL;
+client *cfoc = NULL;
 
 void suicide(char *s)
 {
@@ -99,59 +108,95 @@ void keyhook(void)
 	unsigned int nullmod[] = {0, LockMask, NumlockMask, NumlockMask | LockMask};
 
 	#define mod Mod4Mask
+	#define key(x) XKeysymToKeycode(dis, XStringToKeysym(x))
+
+	KeyCode keys[] = {key("Escape"), key("r"), key("w"), key("h"), key("l")};
 	
 	for (int i=0; i<lengthof(nullmod); i++)
 	{
-		// hook mod-escape
-		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("Escape")),
-				 mod | nullmod[i], DefaultRootWindow(dis), True,
-				 GrabModeAsync, GrabModeAsync);
-		// hook mod-r
-		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("r")),
-				 mod | nullmod[i], DefaultRootWindow(dis), True,
-				 GrabModeAsync, GrabModeAsync);
-		// hook mod-w
-		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("w")),
-				 mod | nullmod[i], DefaultRootWindow(dis), True,
-				 GrabModeAsync, GrabModeAsync);
-
-		// hook mod-mouse1
-		XGrabButton(dis, 1, mod | nullmod[i], DefaultRootWindow(dis), True,
-					ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-					GrabModeAsync, GrabModeAsync, None, None);
-		// hook mod-mouse3
-		XGrabButton(dis, 3, mod | nullmod[i], DefaultRootWindow(dis), True,
-					ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-					GrabModeAsync, GrabModeAsync, None, None);
+		for (int j=0; j<lengthof(keys); j++)
+		{
+			XGrabKey(dis, keys[j], mod | nullmod[i], DefaultRootWindow(dis),
+					 True, GrabModeAsync, GrabModeAsync);
+		}
 	}
 }
 
-void killwin(Window* w)
+void killclient(client *c)
 {
+	if (c->w == DefaultRootWindow(dis))
+	{
+		fprintf(stderr, "tried to kill root window\n");
+		return;
+	}
+
+	if (c->p) c->p->n = c->n;
+	else chead = c->n;
+
+	if (c->n) c->n->p = c->p;
+	else ctail = c->p;
+		
+	Window w = c->w;
 	XEvent e ={0};
 	e.xclient.type = ClientMessage;
-	e.xclient.window = *w;
+	e.xclient.window = w;
 	e.xclient.message_type = XInternAtom(dis, "WM_PROTOCOLS", False);
 	e.xclient.format = 32;
 	e.xclient.data.l[0] = XInternAtom(dis, "WM_DELETE_WINDOW", False);
 	e.xclient.data.l[1] = CurrentTime;
 	
-	XSendEvent(dis, *w, False, NoEventMask, &e);
+	XSendEvent(dis, w, False, NoEventMask, &e);
 	XFlush(dis);
 
 #ifdef DEBUG
-	fprintf(stdout, "kill 0x%lx\n", *w);
+	fprintf(stdout, "kill 0x%lx\n", w);
 	fflush(stdout);
 #endif
+
+	free(c);
 }
 
-/*
-void buttonpress(XEvent *e)
+client *getclient(Window *w)
 {
-	XWindowAttributes a;
-	XGetWindowAttributes(dis, e->xbutton.subwindow, &a);
+	client *c = chead;
+	while (c)
+	{
+		if (c->w == *w) return c;
+		c= c->n;
+	}
+	return NULL;
 }
-*/
+
+void focusclient(client *c)
+{
+	XRaiseWindow(dis, c->w);
+	XSetInputFocus(dis, c->w, RevertToPointerRoot, CurrentTime);
+	cfoc = c;
+}
+
+void killcurrentclient(void)
+{
+	client *c = cfoc;
+	client *t;
+	if (c->p) t = c->p;
+	else if (c->n) t = c->n;
+	else t = NULL;
+
+	killclient(c);
+
+	if (t) focusclient(t);
+	else cfoc = NULL;
+}
+
+void focusprev(void)
+{
+	if (cfoc->p) focusclient(cfoc->p);
+}
+
+void focusnext(void)
+{
+	if (cfoc->n) focusclient(cfoc->n);
+}
 
 void configurerequest(XEvent *e)
 {
@@ -167,9 +212,15 @@ void configurerequest(XEvent *e)
 	XConfigureWindow(dis, xcr.window, xcr.value_mask, &cc);
 }
 
+void destroynotify(XEvent *e)
+{
+	// TODO: don't free window until we get destroy notify
+}
+
+/*
 void enternotify(XEvent *e)
 {
-// compress enter notify events to mose recent one
+	// compress enter notify events to mose recent one
 	while(XCheckTypedEvent(dis, EnterNotify, e));
 	XCrossingEvent v = e->xcrossing;
 	if (v.mode != NotifyNormal)
@@ -179,13 +230,12 @@ void enternotify(XEvent *e)
 	
 	if (v.window == DefaultRootWindow(dis)) return;
 	
-	XRaiseWindow(dis, v.window);
-	XSetInputFocus(dis, v.window, RevertToPointerRoot, CurrentTime);
 #ifdef DEBUG
 	fprintf(stdout, "raise 0x%lx\n", v.window);
 	fflush(stdout);
 #endif
 }
+*/
 
 void keypress(XEvent *e)
 {
@@ -196,7 +246,14 @@ void keypress(XEvent *e)
 		if (e->xkey.state & mod) exec("rofi -show drun");
 		break;
 	case XK_w:
-		if (e->xkey.state & mod) killwin(&e->xkey.subwindow);
+		if (e->xkey.state & mod) killcurrentclient();
+		break;
+	case XK_h:
+		focusprev();
+		break;
+	case XK_l:
+		focusnext();
+		break;
 	case XK_Escape:
 		suicide("exiting!");
 		break;
@@ -205,20 +262,39 @@ void keypress(XEvent *e)
 
 void maprequest(XEvent *e)
 {
-	Window w = e->xmaprequest.window;
+	if (e->xmaprequest.parent != DefaultRootWindow(dis))
+		return;
+	
+	client *c = malloc(sizeof(*c));
+	c->w = e->xmaprequest.window;
+	c->n = NULL;
+	c->p = NULL;
+
+	if (!chead)
+	{
+		chead = c;
+		ctail = c;
+	}
+	else
+	{
+		ctail->n = c;
+		c->p = ctail;
+		ctail = c;
+	}
 
 	int x = DisplayWidth(dis, scr);
 	int y = DisplayHeight(dis, scr);
-	XMoveResizeWindow(dis, w, 0, 0, x, y);
+	XMoveResizeWindow(dis, c->w, 0, 0, x, y);
 	
-	XMapWindow(dis, e->xmaprequest.window);
-	XSelectInput(dis, e->xmaprequest.window, EnterWindowMask);
-	XSetInputFocus(dis, w, RevertToPointerRoot, CurrentTime);
+	XMapWindow(dis, c->w);
+	XSelectInput(dis, c->w, EnterWindowMask);
+	focusclient(c);
 }
 
 static eventhandler handler[LASTEvent] = {
 	[ConfigureRequest] = configurerequest,
-	[EnterNotify] = enternotify,
+	[DestroyNotify] = destroynotify,
+	// [EnterNotify] = enternotify,
 	[KeyPress] = keypress,
 	[MapRequest] = maprequest,
 };
@@ -239,6 +315,7 @@ int main(int argc, char *argv[])
 
 	XQueryTree(dis, DefaultRootWindow(dis), &root, &parent, &children, &n);
 	
+	// TODO: grab existing windows and add to clients
 	for (unsigned int i=0; i<n; i++) {
 		XSelectInput(dis, children[i], EnterWindowMask);
 	}
@@ -250,7 +327,7 @@ int main(int argc, char *argv[])
 		XNextEvent(dis, &e);
 		if (e.type >=0 && e.type < LASTEvent && handler[e.type])
 			handler[e.type](&e);
-#ifdef DEBUG
+#if 0
 		else
 			fprintf(stderr, "unhandled XEvent. type: %s\n", namexevent(e.type));
 #endif
