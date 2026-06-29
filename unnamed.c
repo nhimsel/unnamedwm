@@ -8,7 +8,8 @@
 #include <stdlib.h>
 
 #define max(x, y) ((x) > (y) ? (x) : (y))
-#define exec(s) if (fork() == 0) {execl("/bin/sh", "sh", "-c", s, 0); _exit(1);}
+#define exec(s) if (fork() == 0) \
+	{execl("/bin/sh", "sh", "-c", s, ">/dev/null", 0); _exit(1);}
 
 #define lengthof(x) (sizeof x / sizeof x[0])
 #define NumlockMask Mod2Mask
@@ -94,27 +95,52 @@ void checkwm(void)
 void keyhook(void)
 {
 	unsigned int nullmod[] = {0, LockMask, NumlockMask, NumlockMask | LockMask};
+
+	#define mod Mod4Mask
 	
 	for (int i=0; i<lengthof(nullmod); i++)
 	{
-		// hook alt-escape
+		// hook mod-escape
 		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("Escape")),
-				 Mod1Mask | nullmod[i], DefaultRootWindow(dis), True,
+				 mod | nullmod[i], DefaultRootWindow(dis), True,
 				 GrabModeAsync, GrabModeAsync);
-		// hook alt-r
+		// hook mod-r
 		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("r")),
-				 Mod1Mask | nullmod[i], DefaultRootWindow(dis), True,
+				 mod | nullmod[i], DefaultRootWindow(dis), True,
+				 GrabModeAsync, GrabModeAsync);
+		// hook mod-w
+		XGrabKey(dis, XKeysymToKeycode(dis, XStringToKeysym("w")),
+				 mod | nullmod[i], DefaultRootWindow(dis), True,
 				 GrabModeAsync, GrabModeAsync);
 
-		// hook alt-mouse1
-		XGrabButton(dis, 1, Mod1Mask | nullmod[i], DefaultRootWindow(dis), True,
+		// hook mod-mouse1
+		XGrabButton(dis, 1, mod | nullmod[i], DefaultRootWindow(dis), True,
 					ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
 					GrabModeAsync, GrabModeAsync, None, None);
-		// hook alt-mouse3
-		XGrabButton(dis, 3, Mod1Mask | nullmod[i], DefaultRootWindow(dis), True,
+		// hook mod-mouse3
+		XGrabButton(dis, 3, mod | nullmod[i], DefaultRootWindow(dis), True,
 					ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
 					GrabModeAsync, GrabModeAsync, None, None);
 	}
+}
+
+void killwin(Window* w)
+{
+	XEvent e ={0};
+	e.xclient.type = ClientMessage;
+	e.xclient.window = *w;
+	e.xclient.message_type = XInternAtom(dis, "WM_PROTOCOLS", False);
+	e.xclient.format = 32;
+	e.xclient.data.l[0] = XInternAtom(dis, "WM_DELETE_WINDOW", False);
+	e.xclient.data.l[1] = CurrentTime;
+	
+	XSendEvent(dis, *w, False, NoEventMask, &e);
+	XFlush(dis);
+
+#ifdef DEBUG
+	fprintf(stdout, "kill 0x%lx\n", *w);
+	fflush(stdout);
+#endif
 }
 
 int main(int argc, char *argv[])
@@ -188,7 +214,10 @@ int main(int argc, char *argv[])
 
 			switch (k) {
 			case XK_r:
-				if (e.xkey.state & Mod1Mask) exec("rofi -show drun");
+				if (e.xkey.state & mod) exec("rofi -show drun");
+				break;
+			case XK_w:
+				if (e.xkey.state & mod) killwin(&e.xkey.subwindow);
 				break;
 			case XK_Escape:
 				suicide("exiting!");
