@@ -14,6 +14,8 @@
 #define lengthof(x) (sizeof x / sizeof x[0])
 #define NumlockMask Mod2Mask
 
+typedef void (*eventhandler)(XEvent *);
+
 Display *dis;
 int scr;
 
@@ -143,6 +145,84 @@ void killwin(Window* w)
 #endif
 }
 
+/*
+void buttonpress(XEvent *e)
+{
+	XWindowAttributes a;
+	XGetWindowAttributes(dis, e->xbutton.subwindow, &a);
+}
+*/
+
+void configurerequest(XEvent *e)
+{
+	XConfigureRequestEvent xcr = e->xconfigurerequest;
+	XWindowChanges cc;
+	cc.x = xcr.x;
+	cc.y = xcr.y;
+	cc.width = xcr.width;
+	cc.height = xcr.height;
+	cc.border_width = xcr.border_width;
+	cc.sibling = xcr.above;
+	cc.stack_mode = xcr.detail;
+	XConfigureWindow(dis, xcr.window, xcr.value_mask, &cc);
+}
+
+void enternotify(XEvent *e)
+{
+// compress enter notify events to mose recent one
+	while(XCheckTypedEvent(dis, EnterNotify, e));
+	XCrossingEvent v = e->xcrossing;
+	if (v.mode != NotifyNormal)
+		return;
+	if (v.detail == NotifyInferior)
+		return;
+	
+	if (v.window == DefaultRootWindow(dis)) return;
+	
+	XRaiseWindow(dis, v.window);
+	XSetInputFocus(dis, v.window, RevertToPointerRoot, CurrentTime);
+#ifdef DEBUG
+	fprintf(stdout, "raise 0x%lx\n", v.window);
+	fflush(stdout);
+#endif
+}
+
+void keypress(XEvent *e)
+{
+	KeySym k = XLookupKeysym(&e->xkey, 0);
+	
+	switch (k) {
+	case XK_r:
+		if (e->xkey.state & mod) exec("rofi -show drun");
+		break;
+	case XK_w:
+		if (e->xkey.state & mod) killwin(&e->xkey.subwindow);
+	case XK_Escape:
+		suicide("exiting!");
+		break;
+	}
+}
+
+void maprequest(XEvent *e)
+{
+	Window w = e->xmaprequest.window;
+
+	int x = DisplayWidth(dis, scr);
+	int y = DisplayHeight(dis, scr);
+	XMoveResizeWindow(dis, w, 0, 0, x, y);
+	
+	XMapWindow(dis, e->xmaprequest.window);
+	XSelectInput(dis, e->xmaprequest.window, EnterWindowMask);
+	XSetInputFocus(dis, w, RevertToPointerRoot, CurrentTime);
+}
+
+static eventhandler handler[LASTEvent] = {
+	[ConfigureRequest] = configurerequest,
+	[EnterNotify] = enternotify,
+	[KeyPress] = keypress,
+	[MapRequest] = maprequest,
+};
+
 int main(int argc, char *argv[])
 {
 	if (!(dis = XOpenDisplay(0x0)))
@@ -152,9 +232,8 @@ int main(int argc, char *argv[])
 
 	XSetErrorHandler(err);
 	scr = DefaultScreen(dis);
-	XButtonEvent s;
 	XEvent e;
-	XWindowAttributes atts;
+
 	Window root, parent, *children;
 	unsigned int n;
 
@@ -166,87 +245,15 @@ int main(int argc, char *argv[])
 
 	keyhook();
 
-	s.subwindow = None;
 	for(;;)
 	{
 		XNextEvent(dis, &e);
-		switch (e.type) {
-		case ButtonPress:
-			XGetWindowAttributes(dis, e.xbutton.subwindow, &atts);
-			s = e.xbutton;
-			break;
-		case ButtonRelease:
-			s.subwindow = None;
-			break;
-		case ConfigureRequest: {
-			XConfigureRequestEvent xcr = e.xconfigurerequest;
-			XWindowChanges cc;
-			cc.x = xcr.x;
-			cc.y = xcr.y;
-			cc.width = xcr.width;
-			cc.height = xcr.height;
-			cc.border_width = xcr.border_width;
-			cc.sibling = xcr.above;
-			cc.stack_mode = xcr.detail;
-			XConfigureWindow(dis, xcr.window, xcr.value_mask, &cc);
-		}
-		case EnterNotify: {
-			// compress enter notify events to mose recent one
-			while(XCheckTypedEvent(dis, EnterNotify, &e));
-			XCrossingEvent *v = &e.xcrossing;
-			if (v->mode != NotifyNormal)
-				break;
-			if (v->detail == NotifyInferior)
-				break;
-
-			if (v->window == DefaultRootWindow(dis)) break;
-
-			XRaiseWindow(dis, v->window);
-			XSetInputFocus(dis, v->window, RevertToPointerRoot, CurrentTime);
+		if (e.type >=0 && e.type < LASTEvent && handler[e.type])
+			handler[e.type](&e);
 #ifdef DEBUG
-			fprintf(stdout, "raise 0x%lx\n", v->window);
-			fflush(stdout);
-#endif
-			break;
-		}
-		case KeyPress: {
-			KeySym k = XLookupKeysym(&e.xkey, 0);
-
-			switch (k) {
-			case XK_r:
-				if (e.xkey.state & mod) exec("rofi -show drun");
-				break;
-			case XK_w:
-				if (e.xkey.state & mod) killwin(&e.xkey.subwindow);
-				break;
-			case XK_Escape:
-				suicide("exiting!");
-				break;
-			}
-			break;
-		}
-		case MapRequest:
-			XMapWindow(dis, e.xmaprequest.window);
-			XSelectInput(dis, e.xmaprequest.window, EnterWindowMask);
-			break;
-		case MotionNotify:
-			// compress motion events to most recent one
-			while(XCheckTypedEvent(dis, MotionNotify, &e));
-			int dx = e.xbutton.x_root - s.x_root;
-			int dy = e.xbutton.y_root - s.y_root;
-			XMoveResizeWindow(dis, s.subwindow,
-							  atts.x + (s.button==1 ? dx : 0),
-							  atts.y + (s.button==1 ? dy : 0),
-							  max(1, atts.width + (s.button==3 ? dx : 0)),
-							  max(1, atts.height + (s.button==3 ? dy : 0)));
-			break;
-		default:
-#ifdef DEBUG
+		else
 			fprintf(stderr, "unhandled XEvent. type: %s\n", namexevent(e.type));
 #endif
-			break;
-		}
 	}
-
 	return 0;
 }
