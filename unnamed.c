@@ -1,4 +1,6 @@
 // TODO: implement compat with ICCCM and EWMH as needed
+//       at least enough to use rofi for windows and bars like polybar
+// TODO: use a config file
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
@@ -128,6 +130,7 @@ void killclient(client *c)
 {
 	if (c->w == DefaultRootWindow(dis))
 	{
+		// shouldn't happen, but i suck at coding so it might
 		fprintf(stderr, "tried to kill root window\n");
 		return;
 	}
@@ -155,6 +158,7 @@ void killclient(client *c)
 	fflush(stdout);
 #endif
 
+	// TODO: do this in destroy notify instead
 	free(c);
 }
 
@@ -178,13 +182,12 @@ void focusclient(client *c)
 
 void killcurrentclient(void)
 {
-	client *c = cfoc;
 	client *t;
-	if (c->p) t = c->p;
-	else if (c->n) t = c->n;
+	if (cfoc->p) t = cfoc->p;
+	else if (cfoc->n) t = cfoc->n;
 	else t = NULL;
 
-	killclient(c);
+	killclient(cfoc);
 
 	if (t) focusclient(t);
 	else cfoc = NULL;
@@ -272,6 +275,8 @@ void maprequest(XEvent *e)
 	c->n = NULL;
 	c->p = NULL;
 
+	// TODO: spawn window right of current window
+	//       maybe make an option to toggle between the behaviours later
 	if (!chead)
 	{
 		chead = c;
