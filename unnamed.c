@@ -135,12 +135,15 @@ void killclient(client *c)
 		return;
 	}
 
-	if (c->p) c->p->n = c->n;
-	else chead = c->n;
+	if (chead == NULL)
+	{
+#ifdef DEBUG
+		fprintf(stdout, "no clients left to kill\n");
+		fflush(stdout);
+#endif
+		return;
+	}
 
-	if (c->n) c->n->p = c->p;
-	else ctail = c->p;
-		
 	Window w = c->w;
 	XEvent e ={0};
 	e.xclient.type = ClientMessage;
@@ -157,12 +160,9 @@ void killclient(client *c)
 	fprintf(stdout, "kill 0x%lx\n", w);
 	fflush(stdout);
 #endif
-
-	// TODO: do this in destroy notify instead
-	free(c);
 }
 
-client *getclient(Window *w)
+client* getclient(Window *w)
 {
 	client *c = chead;
 	while (c)
@@ -182,6 +182,15 @@ void focusclient(client *c)
 
 void killcurrentclient(void)
 {
+	if (!cfoc)
+	{
+#ifdef DEBUG
+		fprintf(stdout, "there is no client to kill\n");
+		fflush(stdout);
+#endif
+		return;
+	}
+
 	client *t;
 	if (cfoc->p) t = cfoc->p;
 	else if (cfoc->n) t = cfoc->n;
@@ -219,7 +228,33 @@ void configurerequest(XEvent *e)
 
 void destroynotify(XEvent *e)
 {
-	// TODO: don't free window until we get destroy notify
+	client* c = getclient(&e->xdestroywindow.window);
+
+
+	if (c != NULL)
+	{
+		if (c->w == DefaultRootWindow(dis)) return;
+		
+		if (c->p) c->p->n = c->n;
+		else chead = c->n;
+		
+		if (c->n) c->n->p = c->p;
+		else ctail = c->p;
+
+		if (c == cfoc)
+		{
+			if (c->p) cfoc = c->p;
+			else cfoc = c->n;
+		}
+	}
+#ifdef DEBUG
+	else
+	{
+		fprintf(stderr, "client for window 0x%lx is NULL\n", e->xdestroywindow.window);
+	}
+#endif
+	
+	free(c);
 }
 
 /*
@@ -296,6 +331,11 @@ void maprequest(XEvent *e)
 	XMapWindow(dis, c->w);
 	XSelectInput(dis, c->w, EnterWindowMask);
 	focusclient(c);
+
+#ifdef DEBUG
+	fprintf(stdout, "spawn window 0x%lx\n", c->w);
+	fflush(stdout);
+#endif
 }
 
 static eventhandler handler[LASTEvent] = {
