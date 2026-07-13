@@ -1,6 +1,10 @@
-// TODO: implement compat with ICCCM and EWMH as needed
-//       at least enough to use rofi for windows and bars like polybar
-// TODO: use a config file
+/*
+TODO: implement compat with ICCCM and EWMH as needed
+      at least enough to use rofi for windows and bars like polybar
+TODO: use a config file
+TODO: handle floating windows
+TODO: fix fcitx5 windows (fcitx5 works, but its windows don't display)
+*/
 
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
