@@ -366,16 +366,6 @@ int main(int argc, char *argv[])
 	scr = DefaultScreen(dis);
 	XEvent e;
 
-	Window root, parent, *children;
-	unsigned int n;
-
-	XQueryTree(dis, DefaultRootWindow(dis), &root, &parent, &children, &n);
-	
-	// TODO: grab existing windows and add to clients
-	for (unsigned int i=0; i<n; i++) {
-		XSelectInput(dis, children[i], EnterWindowMask);
-	}
-
 	keyhook();
 
 	for(;;)
