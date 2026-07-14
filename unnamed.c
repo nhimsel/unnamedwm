@@ -314,8 +314,7 @@ void maprequest(XEvent *e)
 	c->n = NULL;
 	c->p = NULL;
 
-	// TODO: spawn window right of current window
-	//       maybe make an option to toggle between the behaviours later
+	// maybe make an option to toggle between the behaviours later
 	if (!chead)
 	{
 		chead = c;
@@ -323,9 +322,15 @@ void maprequest(XEvent *e)
 	}
 	else
 	{
+		/*
 		ctail->n = c;
 		c->p = ctail;
 		ctail = c;
+		*/
+		c->n = cfoc->n;
+		c->p = cfoc;
+		if (cfoc->n) cfoc->n->p = c;
+		cfoc->n = c;
 	}
 
 	int x = DisplayWidth(dis, scr);
