@@ -56,7 +56,7 @@ int otherwmerr(Display *d, XErrorEvent *e)
 	exit(1);
 }
 
-#ifdef DEBUG
+#if 0
 const char* namexevent(int type)
 {
     switch (type) {
