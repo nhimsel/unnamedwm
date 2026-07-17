@@ -264,26 +264,6 @@ void destroynotify(XEvent *e)
 	free(c);
 }
 
-/*
-void enternotify(XEvent *e)
-{
-	// compress enter notify events to mose recent one
-	while(XCheckTypedEvent(dis, EnterNotify, e));
-	XCrossingEvent v = e->xcrossing;
-	if (v.mode != NotifyNormal)
-		return;
-	if (v.detail == NotifyInferior)
-		return;
-	
-	if (v.window == DefaultRootWindow(dis)) return;
-	
-#ifdef DEBUG
-	fprintf(stdout, "raise 0x%lx\n", v.window);
-	fflush(stdout);
-#endif
-}
-*/
-
 void keypress(XEvent *e)
 {
 	KeySym k = XLookupKeysym(&e->xkey, 0);
@@ -362,7 +342,6 @@ void maprequest(XEvent *e)
 static eventhandler handler[LASTEvent] = {
 	[ConfigureRequest] = configurerequest,
 	[DestroyNotify] = destroynotify,
-	// [EnterNotify] = enternotify,
 	[KeyPress] = keypress,
 	[MapRequest] = maprequest,
 };
