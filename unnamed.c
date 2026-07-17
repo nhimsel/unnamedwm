@@ -252,10 +252,11 @@ void destroynotify(XEvent *e)
 			else cfoc = c->n;
 		}
 	}
-#ifdef DEBUG
+#if 0
 	else
 	{
-		fprintf(stderr, "client for window 0x%lx is NULL\n", e->xdestroywindow.window);
+		fprintf(stderr, "client for window 0x%lx is NULL\n",
+				e->xdestroywindow.window);
 	}
 #endif
 	
