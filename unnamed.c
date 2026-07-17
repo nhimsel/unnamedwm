@@ -309,6 +309,15 @@ void maprequest(XEvent *e)
 {
 	if (e->xmaprequest.parent != DefaultRootWindow(dis))
 		return;
+
+	if (getclient(&e->xmaprequest.window))
+	{
+#ifdef DEBUG
+		fprintf(stderr, "client 0x%lx is already mapped\n",
+				e->xmaprequest.window);
+#endif
+		return;
+	}
 	
 	client *c = malloc(sizeof(*c));
 	c->w = e->xmaprequest.window;
