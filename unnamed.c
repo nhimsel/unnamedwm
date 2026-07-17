@@ -3,7 +3,8 @@ TODO: implement compat with ICCCM and EWMH as needed
       at least enough to use rofi for windows and bars like polybar
 TODO: use a config file
 TODO: handle floating windows
-TODO: fix fcitx5 windows (fcitx5 works, but its windows don't display)
+TODO: there seems to be a bug when windows are deleted. need to move left/right
+      multiple times sometimes, as if there is an invisible window
 */
 
 #include <X11/Xlib.h>
