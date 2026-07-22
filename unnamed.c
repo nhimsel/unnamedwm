@@ -122,14 +122,26 @@ void keyhook(void)
 	#define mod Mod4Mask
 	#define key(x) XKeysymToKeycode(dis, XStringToKeysym(x))
 
-	KeyCode keys[] = {key("Escape"), key("r"), key("w"), key("h"), key("l")};
+	struct key {
+		KeyCode key;
+		int shiftmod;
+	};
+
+	struct key keys[] = {{key("Escape"), 0}, {key("r"), 0}, {key("w"), 0},
+				  {key("h"), 0}, {key("l"), 0},{key("H"), 1}, {key("L"), 1}};
 	
 	for (int i=0; i<lengthof(nullmod); i++)
 	{
 		for (int j=0; j<lengthof(keys); j++)
 		{
-			XGrabKey(dis, keys[j], mod | nullmod[i], DefaultRootWindow(dis),
-					 True, GrabModeAsync, GrabModeAsync);
+			if (keys[j].shiftmod)
+				XGrabKey(dis, keys[j].key, mod | nullmod[i] | ShiftMask,
+						 DefaultRootWindow(dis), True,
+						 GrabModeAsync, GrabModeAsync);
+			else
+				XGrabKey(dis, keys[j].key, mod | nullmod[i],
+						 DefaultRootWindow(dis), True,
+						 GrabModeAsync, GrabModeAsync);
 		}
 	}
 }
@@ -222,6 +234,46 @@ void focusnext(void)
 	if (cfoc->n) focusclient(cfoc->n);
 }
 
+void moveprev(void)
+{
+	if (!cfoc) return;
+	if (cfoc->p)
+	{
+#ifdef DEBUG
+		fprintf(stdout, "moveprev 0x%lx\n", cfoc->w);
+		fflush(stdout);
+#endif
+		cfoc->p->n = cfoc->n;
+		if (cfoc->p->p) cfoc->p->p->n = cfoc;
+		else chead = cfoc;
+		if (cfoc->n) cfoc->n->p = cfoc->p;
+		else ctail = cfoc->p;
+		cfoc->n = cfoc->p;
+		cfoc->p = cfoc->n->p;
+		cfoc->n->p = cfoc;
+	}
+}
+
+void movenext(void)
+{
+	if (!cfoc) return;
+	if (cfoc->n)
+	{
+#ifdef DEBUG
+		fprintf(stdout, "movenext 0x%lx\n", cfoc->w);
+		fflush(stdout);
+#endif
+		cfoc->n->p = cfoc->p;
+		if (cfoc->n->n) cfoc->n->n->p = cfoc;
+		else ctail = cfoc;
+		if (cfoc->p) cfoc->p->n = cfoc->n;
+		else chead = cfoc->n;
+		cfoc->p = cfoc->n;
+		cfoc->n = cfoc->p->n;
+		cfoc->p->n = cfoc;
+	}
+}
+
 void configurerequest(XEvent *e)
 {
 	XConfigureRequestEvent xcr = e->xconfigurerequest;
@@ -270,7 +322,9 @@ void destroynotify(XEvent *e)
 
 void keypress(XEvent *e)
 {
+	// note mod is declared in keyhook. will be moved to config once implemented
 	KeySym k = XLookupKeysym(&e->xkey, 0);
+	int s = e->xkey.state;
 	
 	switch (k) {
 	case XK_r:
@@ -280,10 +334,12 @@ void keypress(XEvent *e)
 		if (e->xkey.state & mod) killcurrentclient();
 		break;
 	case XK_h:
-		focusprev();
+		if (s & ShiftMask) moveprev();
+		else focusprev();
 		break;
 	case XK_l:
-		focusnext();
+		if (s & ShiftMask) movenext();
+		else focusnext();
 		break;
 	case XK_Escape:
 		suicide("exiting!");
