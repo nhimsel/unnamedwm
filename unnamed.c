@@ -214,11 +214,13 @@ void killcurrentclient(void)
 
 void focusprev(void)
 {
+	if (!cfoc) return;
 	if (cfoc->p) focusclient(cfoc->p);
 }
 
 void focusnext(void)
 {
+	if (!cfoc) return;
 	if (cfoc->n) focusclient(cfoc->n);
 }
 
