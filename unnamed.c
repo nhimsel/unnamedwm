@@ -18,8 +18,12 @@ TODO: there seems to be a bug when windows are deleted. need to move left/right
 #include <stdlib.h>
 
 #define max(x, y) ((x) > (y) ? (x) : (y))
-#define exec(s) if (fork() == 0) \
-	{execl("/bin/sh", "sh", "-c", s, ">/dev/null", 0); _exit(1);}
+#define exec(s) if (fork() == 0) { \
+	char _cmd[512]; \
+	snprintf(_cmd, sizeof(_cmd), "%s >/dev/null 2>&1", s); \
+	execl("/bin/sh", "sh", "-c", _cmd, (char *)NULL); \
+	_exit(1); \
+}
 
 #define lengthof(x) (sizeof x / sizeof x[0])
 #define NumlockMask Mod2Mask
