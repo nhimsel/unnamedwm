@@ -17,7 +17,6 @@ TODO: there seems to be a bug when windows are deleted. need to move left/right
 #include <unistd.h>
 #include <stdlib.h>
 
-#define max(x, y) ((x) > (y) ? (x) : (y))
 #define exec(s) if (fork() == 0) { \
 	char _cmd[512]; \
 	snprintf(_cmd, sizeof(_cmd), "%s >/dev/null 2>&1", s); \
