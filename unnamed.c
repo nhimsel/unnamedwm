@@ -1,6 +1,7 @@
 /*
 TODO: implement compat with ICCCM and EWMH as needed
       at least enough to use rofi for windows and bars like polybar
+TODO: implement virtual desktops
 TODO: use a config file
 TODO: handle floating windows
       is this really needed?
@@ -33,6 +34,14 @@ typedef struct client
 	struct client *n;
 	struct client *p;
 } client;
+
+struct atoms
+{
+	Atom netactivewindow;
+	Atom netclientlist;
+	Atom netclosewindow;
+	Atom netsupported;
+} atoms;
 
 Display *dis = NULL;
 int scr = 0;
@@ -146,6 +155,19 @@ void keyhook(void)
 	}
 }
 
+void rootatoms(void)
+{
+	atoms.netsupported = XInternAtom(dis, "_NET_SUPPORTED", False);
+	Atom a[] = {
+		atoms.netactivewindow = XInternAtom(dis, "_NET_ACTIVE_WINDOW", False),
+		atoms.netclientlist = XInternAtom(dis, "_NET_CLIENT_LIST", False),
+		atoms.netclosewindow = XInternAtom(dis, "_NET_CLOSE_WINDOW", False)
+	};
+
+	XChangeProperty(dis, XDefaultRootWindow(dis), atoms.netsupported, XA_ATOM,
+					32, PropModeReplace, (unsigned char*)a, lengthof(a));
+}
+
 void killclient(client *c)
 {
 	if (c->w == DefaultRootWindow(dis))
@@ -198,6 +220,10 @@ void focusclient(client *c)
 	XRaiseWindow(dis, c->w);
 	XSetInputFocus(dis, c->w, RevertToPointerRoot, CurrentTime);
 	cfoc = c;
+
+	XChangeProperty(dis, DefaultRootWindow(dis), atoms.netactivewindow,
+					XA_WINDOW, 32, PropModeReplace,
+					(unsigned char *)&cfoc->w, 1);
 }
 
 void killcurrentclient(void)
@@ -205,8 +231,7 @@ void killcurrentclient(void)
 	if (!cfoc)
 	{
 #ifdef DEBUG
-		fprintf(stdout, "there is no client to kill\n");
-		fflush(stdout);
+		fprintf(stderr, "there is no client to kill\n");
 #endif
 		return;
 	}
@@ -274,6 +299,60 @@ void movenext(void)
 	}
 }
 
+void buildclientlist(void)
+{
+	int c = 0;
+	for (client *i = chead; i; i = i->n) c++;
+
+	Window *w = malloc(sizeof(Window) * c);
+
+	c = 0;
+	for (client *j = chead; j; j = j->n) w[c++] = j->w;
+
+	XChangeProperty(dis, DefaultRootWindow(dis), atoms.netclientlist,
+					XA_WINDOW, 32, PropModeReplace, (unsigned char *)w, c);
+
+	free(w);
+}
+
+void netactivewindow(Window *w)
+{
+	client *c = getclient(w);
+	if (c) focusclient(c);
+#ifdef DEBUG
+	else fprintf(stderr, "tried to focus unmanaged window 0x%lx\n", *w);
+#endif
+}
+
+void netclosewindow(Window *w)
+{
+	client *c = getclient(w);
+	if (c) killclient(c);
+#ifdef DEBUG
+	else fprintf(stderr, "tried to kill unmanaged window 0x%lx\n", *w);
+#endif
+}
+
+void clientmessage(XEvent *e)
+{
+	Atom m = e->xclient.message_type;
+	if (m == atoms.netsupported)
+		/* don't need to do anything */;
+	else if (m == atoms.netactivewindow)
+		netactivewindow(&e->xclient.window);
+	else if (m == atoms.netclientlist)
+		/* don't need to do anything */;
+	else if (m == atoms.netclosewindow)
+		netclosewindow(&e->xclient.window);
+#ifdef DEBUG
+	else
+	{
+		fprintf(stdout, "clientmessage %lu not handled", m);
+		fflush(stdout);
+	}
+#endif
+}
+
 void configurerequest(XEvent *e)
 {
 	XConfigureRequestEvent xcr = e->xconfigurerequest;
@@ -318,6 +397,8 @@ void destroynotify(XEvent *e)
 #endif
 	
 	free(c);
+
+	buildclientlist();
 }
 
 void keypress(XEvent *e)
@@ -397,9 +478,12 @@ void maprequest(XEvent *e)
 	fprintf(stdout, "spawn window 0x%lx\n", c->w);
 	fflush(stdout);
 #endif
+
+	buildclientlist();
 }
 
 static eventhandler handler[LASTEvent] = {
+	[ClientMessage] = clientmessage,
 	[ConfigureRequest] = configurerequest,
 	[DestroyNotify] = destroynotify,
 	[KeyPress] = keypress,
@@ -418,6 +502,8 @@ int main(int argc, char *argv[])
 	XEvent e;
 
 	keyhook();
+
+	rootatoms();
 
 	for(;;)
 	{
