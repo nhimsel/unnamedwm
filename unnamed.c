@@ -50,6 +50,7 @@ int scr = 0;
 client *chead = NULL;
 client *ctail = NULL;
 client *cfoc = NULL;
+client *umap = NULL; // treated as singly-linked
 
 void suicide(char *s)
 {
@@ -213,6 +214,17 @@ client* getclient(Window *w)
 	{
 		if (c->w == *w) return c;
 		c= c->n;
+	}
+	return NULL;
+}
+
+client* getumapclient(Window *w)
+{
+	client *u = umap;
+	while (u)
+	{
+		if (u->w == *w) return u;
+		u = u->n;
 	}
 	return NULL;
 }
@@ -435,19 +447,26 @@ void maprequest(XEvent *e)
 	if (e->xmaprequest.parent != DefaultRootWindow(dis))
 		return;
 
+	client *c;
 	if (getclient(&e->xmaprequest.window))
 	{
-#ifdef DEBUG
-		fprintf(stderr, "client 0x%lx is already mapped\n",
-				e->xmaprequest.window);
-#endif
-		return;
+		client *u = getumapclient(&e->xmaprequest.window);
+		if (!u) return;
+		
+		if (u == umap) umap = NULL;
+		else u->p->n = u->n;
+
+		c = u;
+		c->n = NULL;
+		c->p = NULL;
 	}
-	
-	client *c = malloc(sizeof(*c));
-	c->w = e->xmaprequest.window;
-	c->n = NULL;
-	c->p = NULL;
+	else
+	{
+		c = malloc(sizeof(*c));
+		c->w = e->xmaprequest.window;
+		c->n = NULL;
+		c->p = NULL;
+	}
 
 	// maybe make an option to toggle between the behaviours later
 	if (!chead)
@@ -484,12 +503,54 @@ void maprequest(XEvent *e)
 	buildclientlist();
 }
 
+void unmapnotify(XEvent *e)
+{
+	client *c = getclient(&e->xunmap.window);
+	if (c)
+	{
+		if (c == cfoc)
+		{
+			if (cfoc->p) focusclient(cfoc->p);
+			else if (cfoc->n) focusclient(cfoc->n);
+			else cfoc=NULL;
+		}
+		
+		if (!c->p)
+		{
+			chead = c->n;
+			if (chead) chead->p = NULL;
+		}
+		else
+			c->p->n = c->n;
+		
+		if (!c->n)
+		{
+			ctail = c->p;
+			if (ctail) ctail->n = NULL;
+		}
+		else
+			c->n->p = c->p;
+
+		c->n = NULL;
+		c->p = NULL;
+		
+		if (!umap) umap=c;
+		else
+		{
+			client *u = umap;
+			while (u->n) u=u->n;
+			u->n=c;
+		}
+	}
+}
+
 static eventhandler handler[LASTEvent] = {
 	[ClientMessage] = clientmessage,
 	[ConfigureRequest] = configurerequest,
 	[DestroyNotify] = destroynotify,
 	[KeyPress] = keypress,
 	[MapRequest] = maprequest,
+	[UnmapNotify] = unmapnotify,
 };
 
 int main(int argc, char *argv[])
