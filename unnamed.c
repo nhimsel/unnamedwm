@@ -409,10 +409,10 @@ void keypress(XEvent *e)
 	
 	switch (k) {
 	case XK_r:
-		if (e->xkey.state & mod) exec("rofi -show drun");
+		exec("rofi -show drun");
 		break;
 	case XK_w:
-		if (e->xkey.state & mod) killcurrentclient();
+		killcurrentclient();
 		break;
 	case XK_h:
 		if (s & ShiftMask) moveprev();
