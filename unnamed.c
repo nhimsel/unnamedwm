@@ -270,6 +270,8 @@ client* getumapclient(Window *w)
 
 void focusclient(client *c)
 {
+	XMoveResizeWindow(dis, c->w, offx, offy, x, y);
+	
 	XRaiseWindow(dis, c->w);
 	XSetInputFocus(dis, c->w, RevertToPointerRoot, CurrentTime);
 	cfoc = c;
@@ -441,7 +443,7 @@ void clientmessage(XEvent *e)
 #ifdef DEBUG
 	else
 	{
-		fprintf(stdout, "clientmessage %lu not handled", m);
+		fprintf(stdout, "clientmessage %lu not handled\n", m);
 		fflush(stdout);
 	}
 #endif
@@ -470,13 +472,28 @@ void configurerequest(XEvent *e)
 
 void destroynotify(XEvent *e)
 {
-	client* c = getclient(&e->xdestroywindow.window);
+	if (dock && e->xdestroywindow.window == dock->w)
+	{
+		x = maxx;
+		y = maxy;
+		offx = offy = 0;
+		dock = NULL;
+#ifdef DEBUG
+		fprintf(stdout, "dock was destroyed\n");
+		fflush(stdout);
+#endif
+		if (cfoc && cfoc->w)
+			XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
 
+		return;
+	}
+	
+	client* c = getclient(&e->xdestroywindow.window);
 
 	if (c != NULL)
 	{
 		if (c->w == DefaultRootWindow(dis)) return;
-		
+
 		if (c->p) c->p->n = c->n;
 		else chead = c->n;
 		
@@ -569,19 +586,12 @@ void maprequest(XEvent *e)
 		XWindowAttributes a;
 		XGetWindowAttributes(dis, c->w, &a);
 
-#ifdef DEBUG
-		fprintf(stdout, "dock: x=%d y=%d w=%d h=%d\n", a.x, a.y, a.width, a.height);
-		fflush(stdout);
-#endif
-
 		updatedockoffset(a);
 
-#ifdef DEBUG
-		fprintf(stdout, "usable area: x=%d y=%d offx=%d offy=%d\n", x, y, offx, offy);
-		fflush(stdout);
-#endif
-
 		XMapWindow(dis, dock->w);
+
+		if (cfoc && cfoc->w)
+			XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
 	}
 	else
 	{
@@ -603,8 +613,7 @@ void maprequest(XEvent *e)
 			if (cfoc->n) cfoc->n->p = c;
 			cfoc->n = c;
 		}
-		XMoveResizeWindow(dis, c->w, offx, offy,
-						  (unsigned int) x, (unsigned int) y);
+		XMoveResizeWindow(dis, c->w, offx, offy, x, y);
 
 		XMapWindow(dis, c->w);
 		// XSelectInput(dis, c->w, EnterWindowMask);
