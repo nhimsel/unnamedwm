@@ -20,6 +20,7 @@ TODO: there seems to be a bug when windows are deleted. need to move left/right
 #include <unistd.h>
 #include <stdlib.h>
 
+#define name "unnamed"
 #define exec(s) if (fork() == 0) {							\
 	char _cmd[512];											\
 	snprintf(_cmd, sizeof(_cmd), "%s >/dev/null 2>&1", s);	\
@@ -43,14 +44,27 @@ struct atoms
 	Atom netclientlist;
 	Atom netclosewindow;
 	Atom netsupported;
+	Atom netsupportingwmcheck;
+	Atom netwmname;
+	Atom netwmwindowtype;
+	Atom netwmwindowtypedock;
+	Atom netwmwindowtypenormal;
+	Atom utf8string;
 } atoms;
 
 Display *dis = NULL;
 int scr = 0;
+int x = 0;
+int y = 0;
+int offx = 0;
+int offy = 0;
+int maxx = 0;
+int maxy = 0;
 client *chead = NULL;
 client *ctail = NULL;
 client *cfoc = NULL;
 client *umap = NULL; // treated as singly-linked
+client *dock = NULL; // treated as singly-linked
 
 void suicide(char *s)
 {
@@ -158,15 +172,40 @@ void keyhook(void)
 	}
 }
 
+void wmcheckwindow(void)
+{
+	Window w = XCreateSimpleWindow(dis, DefaultRootWindow(dis),
+								   -1, -1, 1, 1, 0, 0, 0);
+
+	XChangeProperty(dis, DefaultRootWindow(dis), atoms.netsupportingwmcheck,
+					XA_WINDOW, 32, PropModeReplace, (unsigned char *)&w, 1);
+	// is this one required?
+	XChangeProperty(dis, w, atoms.netsupportingwmcheck, XA_WINDOW, 32,
+					PropModeReplace, (unsigned char *)&w, 1);
+	XChangeProperty(dis, w, atoms.netwmname, atoms.utf8string, 8,
+					PropModeReplace, (unsigned char *)name, strlen(name));
+}
+
 void rootatoms(void)
 {
 	atoms.netsupported = XInternAtom(dis, "_NET_SUPPORTED", False);
 	Atom a[] = {
 		atoms.netactivewindow = XInternAtom(dis, "_NET_ACTIVE_WINDOW", False),
 		atoms.netclientlist = XInternAtom(dis, "_NET_CLIENT_LIST", False),
-		atoms.netclosewindow = XInternAtom(dis, "_NET_CLOSE_WINDOW", False)
+		atoms.netclosewindow = XInternAtom(dis, "_NET_CLOSE_WINDOW", False),
+		atoms.netsupportingwmcheck = XInternAtom(
+			dis, "_NET_SUPPORTING_WM_CHECK", False),
+		atoms.netwmname = XInternAtom(dis, "_NET_WM_NAME", False),
+		atoms.netwmwindowtype = XInternAtom(dis, "_NET_WM_WINDOW_TYPE", False),
+		atoms.netwmwindowtypedock = XInternAtom(
+			dis, "_NET_WM_WINDOW_TYPE_DOCK", False),
+		atoms.netwmwindowtypenormal = XInternAtom(
+			dis, "_NET_WM_WINDOW_TYPE_NORMAL", False),
+		atoms.utf8string = XInternAtom(dis, "UTF8_STRING", False)
 	};
 
+	wmcheckwindow();
+	
 	XChangeProperty(dis, XDefaultRootWindow(dis), atoms.netsupported, XA_ATOM,
 					32, PropModeReplace, (unsigned char*)a, lengthof(a));
 }
@@ -313,6 +352,51 @@ void movenext(void)
 	}
 }
 
+void updatedockoffset(XWindowAttributes a)
+{
+	if (a.width >= a.height)
+	{
+		if (a.y == 0) offy = a.height;
+		else offy = 0;
+		y = maxy - a.height;
+		
+		offx = 0;
+		x = maxx;
+	}
+	else
+	{
+		if (a.x == 0) offx = a.width;
+		else offx = 0;
+		x = maxx - a.width;
+		
+		offy = 0;
+		y = maxy;
+	}
+}
+
+Atom getwindowtype(Window *w)
+{
+	Atom a;
+	int f;
+	unsigned long n, b;
+	Atom *t = NULL;
+
+	if (XGetWindowProperty(dis, *w, atoms.netwmwindowtype, 0, 16, False,
+						   XA_ATOM, &a, &f, &n, &b, (unsigned char **)&t)
+		!= Success)
+		return atoms.netwmwindowtypenormal;
+
+	if (!t||n == 0)
+	{
+		free(t);
+		return atoms.netwmwindowtypenormal;
+	}
+
+	a = t[0];
+	free(t);
+	return a;
+}
+
 void buildclientlist(void)
 {
 	int c = 0;
@@ -350,12 +434,8 @@ void netclosewindow(Window *w)
 void clientmessage(XEvent *e)
 {
 	Atom m = e->xclient.message_type;
-	if (m == atoms.netsupported)
-		/* don't need to do anything */;
-	else if (m == atoms.netactivewindow)
+	if (m == atoms.netactivewindow)
 		netactivewindow(&e->xclient.window);
-	else if (m == atoms.netclientlist)
-		/* don't need to do anything */;
 	else if (m == atoms.netclosewindow)
 		netclosewindow(&e->xclient.window);
 #ifdef DEBUG
@@ -370,15 +450,22 @@ void clientmessage(XEvent *e)
 void configurerequest(XEvent *e)
 {
 	XConfigureRequestEvent xcr = e->xconfigurerequest;
-	XWindowChanges cc;
-	cc.x = xcr.x;
-	cc.y = xcr.y;
-	cc.width = xcr.width;
-	cc.height = xcr.height;
-	cc.border_width = xcr.border_width;
-	cc.sibling = xcr.above;
-	cc.stack_mode = xcr.detail;
-	XConfigureWindow(dis, xcr.window, xcr.value_mask, &cc);
+	XWindowChanges c;
+	c.x = xcr.x;
+	c.y = xcr.y;
+	c.width = xcr.width;
+	c.height = xcr.height;
+	c.border_width = xcr.border_width;
+	c.sibling = xcr.above;
+	c.stack_mode = xcr.detail;
+	XConfigureWindow(dis, xcr.window, xcr.value_mask, &c);
+
+	if (dock && xcr.window == dock->w)
+	{
+		XWindowAttributes a;
+		XGetWindowAttributes(dis, xcr.window, &a);
+		updatedockoffset(a);
+	}
 }
 
 void destroynotify(XEvent *e)
@@ -468,39 +555,68 @@ void maprequest(XEvent *e)
 		c->p = NULL;
 	}
 
-	// maybe make an option to toggle between the behaviours later
-	if (!chead)
+	Atom w = getwindowtype(&c->w);
+	if (w == atoms.netwmwindowtypedock)
 	{
-		chead = c;
-		ctail = c;
+		if(dock)
+		{
+			killclient(dock);
+			x = XDisplayWidth(dis, scr);
+			y = XDisplayHeight(dis, scr);
+		}
+		dock = c;
+
+		XWindowAttributes a;
+		XGetWindowAttributes(dis, c->w, &a);
+
+#ifdef DEBUG
+		fprintf(stdout, "dock: x=%d y=%d w=%d h=%d\n", a.x, a.y, a.width, a.height);
+		fflush(stdout);
+#endif
+
+		updatedockoffset(a);
+
+#ifdef DEBUG
+		fprintf(stdout, "usable area: x=%d y=%d offx=%d offy=%d\n", x, y, offx, offy);
+		fflush(stdout);
+#endif
+
+		XMapWindow(dis, dock->w);
 	}
 	else
 	{
-		/*
-		ctail->n = c;
-		c->p = ctail;
-		ctail = c;
-		*/
-		c->n = cfoc->n;
-		c->p = cfoc;
-		if (cfoc->n) cfoc->n->p = c;
-		cfoc->n = c;
-	}
+		// maybe make an option to toggle between the behaviours later
+		if (!chead)
+		{
+			chead = c;
+			ctail = c;
+		}
+		else
+		{
+			/*
+			  ctail->n = c;
+			  c->p = ctail;
+			  ctail = c;
+			*/
+			c->n = cfoc->n;
+			c->p = cfoc;
+			if (cfoc->n) cfoc->n->p = c;
+			cfoc->n = c;
+		}
+		XMoveResizeWindow(dis, c->w, offx, offy,
+						  (unsigned int) x, (unsigned int) y);
 
-	int x = DisplayWidth(dis, scr);
-	int y = DisplayHeight(dis, scr);
-	XMoveResizeWindow(dis, c->w, 0, 0, x, y);
-	
-	XMapWindow(dis, c->w);
-	XSelectInput(dis, c->w, EnterWindowMask);
-	focusclient(c);
+		XMapWindow(dis, c->w);
+		// XSelectInput(dis, c->w, EnterWindowMask);
+		focusclient(c);
+
+		buildclientlist();
+	}
 
 #ifdef DEBUG
 	fprintf(stdout, "spawn window 0x%lx\n", c->w);
 	fflush(stdout);
 #endif
-
-	buildclientlist();
 }
 
 void unmapnotify(XEvent *e)
@@ -562,6 +678,8 @@ int main(int argc, char *argv[])
 
 	XSetErrorHandler(err);
 	scr = DefaultScreen(dis);
+	maxx = x =  DisplayWidth(dis, scr);
+	maxy  = y =  DisplayHeight(dis, scr);
 	XEvent e;
 
 	keyhook();
