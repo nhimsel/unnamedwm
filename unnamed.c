@@ -3,8 +3,6 @@ TODO: implement compat with ICCCM and EWMH as needed
       at least enough to use rofi for windows and bars like polybar
 TODO: implement virtual desktops
 TODO: use a config file
-TODO: handle floating windows
-      is this really needed?
 */
 
 #include <X11/Xlib.h>
