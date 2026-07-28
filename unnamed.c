@@ -5,10 +5,6 @@ TODO: implement virtual desktops
 TODO: use a config file
 TODO: handle floating windows
       is this really needed?
-TODO: there seems to be a bug when windows are deleted. need to move left/right
-      multiple times sometimes, as if there is an invisible window
-	  UPD: seems to be because of windows that hide themselves while open
-	  like keepassxc
 */
 
 #include <X11/Xlib.h>
