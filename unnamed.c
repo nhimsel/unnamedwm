@@ -20,9 +20,9 @@ TODO: use a config file
 	snprintf(_cmd, sizeof(_cmd), "%s >/dev/null 2>&1", s);	\
 	execl("/bin/sh", "sh", "-c", _cmd, (char *)NULL);		\
 	_exit(1);												\
-}
-#define lengthof(x) (sizeof x / sizeof x[0])
-#define NumlockMask Mod2Mask
+}   // execute command s in bash
+#define lengthof(x) (sizeof x / sizeof x[0]) // gives length of an array
+#define NumlockMask Mod2Mask // move this to config file eventually
 
 typedef void (*eventhandler)(XEvent *);
 typedef struct client
@@ -46,19 +46,19 @@ struct atoms
 	Atom utf8string;
 } atoms;
 
-Display *dis = NULL;
-int scr = 0;
-int x = 0;
-int y = 0;
-int offx = 0;
-int offy = 0;
-int maxx = 0;
-int maxy = 0;
-client *chead = NULL;
-client *ctail = NULL;
-client *cfoc = NULL;
-client *umap = NULL; // treated as singly-linked
-client *dock = NULL; // treated as singly-linked
+Display *dis = NULL;	//x display
+int scr = 0;			// x screen no
+int x = 0;				// workable x range
+int y = 0;				// workable y range
+int offx = 0;			// offset from 0 for x
+int offy = 0;			// offset from 0 for y
+int maxx = 0;			// display's x range
+int maxy = 0;			// display's y range
+client *chead = NULL;	// head of doubly-linked list of visible windows
+client *ctail = NULL;	// tail of doubly-linked list of visible windows
+client *cfoc = NULL;	// currently-focused window
+client *umap = NULL;	// unmapped windows; treated as singly-linked
+client *dock = NULL;	// dock/taskbar window; limited to one
 
 void suicide(char *s)
 {
@@ -75,7 +75,7 @@ int err(Display *d, XErrorEvent *e)
 int otherwmerr(Display *d, XErrorEvent *e)
 {
 	suicide("there's already a wm running.\n");
-	exit(1);
+	return 1;
 }
 
 void checkwm(void)
@@ -89,6 +89,9 @@ void checkwm(void)
 
 void keyhook(void)
 {
+	// hook necessary keybinds
+	// will be rewritten once config file is implemented
+	
 	unsigned int nullmod[] = {0, LockMask, NumlockMask, NumlockMask | LockMask};
 
 	#define mod Mod4Mask
@@ -120,6 +123,8 @@ void keyhook(void)
 
 void wmcheckwindow(void)
 {
+	// creates an invisible, unmapped window for _NET_SUPPORTING_WM_CHECK
+
 	Window w = XCreateSimpleWindow(dis, DefaultRootWindow(dis),
 								   -1, -1, 1, 1, 0, 0, 0);
 
@@ -134,6 +139,8 @@ void wmcheckwindow(void)
 
 void rootatoms(void)
 {
+	// init root atoms for EWMH
+
 	atoms.netsupported = XInternAtom(dis, "_NET_SUPPORTED", False);
 	Atom a[] = {
 		atoms.netactivewindow = XInternAtom(dis, "_NET_ACTIVE_WINDOW", False),
@@ -158,10 +165,15 @@ void rootatoms(void)
 
 void killclient(client *c)
 {
+	// sends a message to kill the window of client c
+	// does not delete windows itself - we wait for destroynotify for that
+
 	if (c->w == DefaultRootWindow(dis))
 	{
-		// shouldn't happen, but i suck at coding so it might
+		// shouldn't happen
+#ifdef DEBUG
 		fprintf(stderr, "tried to kill root window\n");
+#endif
 		return;
 	}
 
@@ -302,6 +314,8 @@ void movenext(void)
 
 void updatedockoffset(XWindowAttributes a)
 {
+	// configures x, y, offx, offy given the dock window's attributes
+
 	if (a.width >= a.height)
 	{
 		if (a.y == 0) offy = a.height;
@@ -452,13 +466,13 @@ void destroynotify(XEvent *e)
 			else cfoc = c->n;
 		}
 	}
-#if 0
-	else
+	else if ((c = getumapclient(&e->xdestroywindow.window)))
 	{
-		fprintf(stderr, "client for window 0x%lx is NULL\n",
-				e->xdestroywindow.window);
+		if (c->w == DefaultRootWindow(dis)) return;
+
+		if (c->p) c->p->n = c->n;
+		else umap = c->n;
 	}
-#endif
 	
 	free(c);
 
@@ -500,18 +514,21 @@ void maprequest(XEvent *e)
 	client *c;
 	if (getclient(&e->xmaprequest.window))
 	{
-		client *u = getumapclient(&e->xmaprequest.window);
-		if (!u) return;
-		
-		if (u == umap) umap = NULL;
-		else u->p->n = u->n;
+		// client already mapped
+		return;
+	}
+	else if ((c = getumapclient(&e->xmaprequest.window)))
+	{
+		// client had been unmapped
+		if (c == umap) umap = NULL;
+		else c->p->n = c->n;
 
-		c = u;
 		c->n = NULL;
 		c->p = NULL;
 	}
 	else
 	{
+		// no client exists
 		c = malloc(sizeof(*c));
 		c->w = e->xmaprequest.window;
 		c->n = NULL;
@@ -523,6 +540,7 @@ void maprequest(XEvent *e)
 	{
 		if(dock)
 		{
+			// replace current dock
 			killclient(dock);
 			x = XDisplayWidth(dis, scr);
 			y = XDisplayHeight(dis, scr);
@@ -541,7 +559,10 @@ void maprequest(XEvent *e)
 	}
 	else
 	{
+		// insert window into list
+		
 		// maybe make an option to toggle between the behaviours later
+		// the behaviors being insert next and insert last
 		if (!chead)
 		{
 			chead = c;
@@ -581,11 +602,13 @@ void unmapnotify(XEvent *e)
 	{
 		if (c == cfoc)
 		{
+			// focus new window if current window closed
 			if (cfoc->p) focusclient(cfoc->p);
 			else if (cfoc->n) focusclient(cfoc->n);
 			else cfoc=NULL;
 		}
 		
+		// move unmapped client to umap list
 		if (!c->p)
 		{
 			chead = c->n;
