@@ -1,7 +1,5 @@
 /*
-TODO: implement compat with ICCCM and EWMH as needed
-      at least enough to use rofi for windows and bars like polybar
-TODO: implement virtual desktops
+TODO: implement virtual desktops + EWMH for them
 TODO: use a config file
 */
 
