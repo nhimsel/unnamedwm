@@ -372,6 +372,9 @@ void buildclientlist(void)
 	XChangeProperty(dis, DefaultRootWindow(dis), atoms.netclientlist,
 					XA_WINDOW, 32, PropModeReplace, (unsigned char *)w, c);
 
+	if (!chead)
+		XChangeProperty(dis, DefaultRootWindow(dis), atoms.netactivewindow,
+						XA_WINDOW, 32, PropModeReplace, NULL, 0);
 	free(w);
 }
 
