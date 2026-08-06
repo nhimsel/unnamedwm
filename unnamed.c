@@ -348,12 +348,12 @@ Atom getwindowtype(Window *w)
 
 	if (!t||n == 0)
 	{
-		free(t);
+		XFree(t);
 		return atoms.netwmwindowtypenormal;
 	}
 
 	a = t[0];
-	free(t);
+	XFree(t);
 	return a;
 }
 
@@ -412,22 +412,25 @@ void clientmessage(XEvent *e)
 
 void configurerequest(XEvent *e)
 {
-	XConfigureRequestEvent xcr = e->xconfigurerequest;
-	XWindowChanges c;
-	c.x = xcr.x;
-	c.y = xcr.y;
-	c.width = xcr.width;
-	c.height = xcr.height;
-	c.border_width = xcr.border_width;
-	c.sibling = xcr.above;
-	c.stack_mode = xcr.detail;
-	XConfigureWindow(dis, xcr.window, xcr.value_mask, &c);
-
-	if (dock && xcr.window == dock->w)
+	if (!getclient(&e->xconfigurerequest.window))
 	{
-		XWindowAttributes a;
-		XGetWindowAttributes(dis, xcr.window, &a);
-		updatedockoffset(a);
+		XConfigureRequestEvent xcr = e->xconfigurerequest;
+		XWindowChanges c;
+		c.x = xcr.x;
+		c.y = xcr.y;
+		c.width = xcr.width;
+		c.height = xcr.height;
+		c.border_width = xcr.border_width;
+		c.sibling = xcr.above;
+		c.stack_mode = xcr.detail;
+		XConfigureWindow(dis, xcr.window, xcr.value_mask, &c);
+
+		if (dock && xcr.window == dock->w)
+		{
+			XWindowAttributes a;
+			XGetWindowAttributes(dis, xcr.window, &a);
+			updatedockoffset(a);
+		}
 	}
 }
 
