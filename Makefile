@@ -21,4 +21,8 @@ clean:
 	rm -f $(TARGET) $(OBJS)
 
 run:
-	./$(TARGET)
+	Xephyr -screen 1260x720 :99 & \
+	XEPHYR_PID=$$!; \
+	trap 'kill $$XEPHYR_PID 2>/dev/null' EXIT INT TERM; \
+	sleep 0.2; \
+	DISPLAY=:99 ./$(TARGET)
