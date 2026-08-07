@@ -161,6 +161,25 @@ void rootatoms(void)
 					32, PropModeReplace, (unsigned char*)a, lengthof(a));
 }
 
+void notifyclient(client *c)
+{
+	XWindowAttributes a;
+	XGetWindowAttributes(dis, c->w, &a);
+	
+	XConfigureEvent v = {0};
+	v.type = ConfigureNotify;
+	v.event = c->w;
+	v.window = c->w;
+	v.x = a.x;
+	v.y = a.y;
+	v.width = a.width;
+	v.height = a.height;
+	v.border_width = 0;
+	v.above = None;
+	v.override_redirect = False;
+	XSendEvent(dis, c->w, False, StructureNotifyMask, (XEvent *)&v);
+}
+
 void killclient(client *c)
 {
 	// sends a message to kill the window of client c
@@ -224,9 +243,16 @@ client* getumapclient(Window *w)
 	return NULL;
 }
 
-void focusclient(client *c)
+void resizeclient(client *c)
 {
 	XMoveResizeWindow(dis, c->w, offx, offy, x, y);
+	notifyclient(c);
+}
+
+void focusclient(client *c)
+{
+	// XMoveResizeWindow(dis, c->w, offx, offy, x, y);
+	// resizeclient(c);
 	
 	XRaiseWindow(dis, c->w);
 	XSetInputFocus(dis, c->w, RevertToPointerRoot, CurrentTime);
@@ -412,8 +438,12 @@ void clientmessage(XEvent *e)
 
 void configurerequest(XEvent *e)
 {
-	if (!getclient(&e->xconfigurerequest.window))
+	Window w = e->xconfigurerequest.window;
+	client *l;
+	if (!(l = getclient(&w)))
 	{
+		// allow unmanaged windows to resize themselves
+		
 		XConfigureRequestEvent xcr = e->xconfigurerequest;
 		XWindowChanges c;
 		c.x = xcr.x;
@@ -432,6 +462,12 @@ void configurerequest(XEvent *e)
 			updatedockoffset(a);
 		}
 	}
+	else
+	{
+		// as per ICCCM, tell the window we ignored its request
+
+		notifyclient(l);
+	}
 }
 
 void destroynotify(XEvent *e)
@@ -447,7 +483,8 @@ void destroynotify(XEvent *e)
 		fflush(stdout);
 #endif
 		if (cfoc && cfoc->w)
-			XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
+			// XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
+			resizeclient(cfoc);
 
 		return;
 	}
@@ -559,7 +596,8 @@ void maprequest(XEvent *e)
 		XMapWindow(dis, dock->w);
 
 		if (cfoc && cfoc->w)
-			XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
+			// XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
+			resizeclient(cfoc);
 	}
 	else
 	{
@@ -583,11 +621,12 @@ void maprequest(XEvent *e)
 			c->p = cfoc;
 			if (cfoc->n) cfoc->n->p = c;
 			cfoc->n = c;
+			if (cfoc == ctail)
+				ctail = c;
 		}
-		XMoveResizeWindow(dis, c->w, offx, offy, x, y);
-
 		XMapWindow(dis, c->w);
 		// XSelectInput(dis, c->w, EnterWindowMask);
+		resizeclient(c);
 		focusclient(c);
 
 		buildclientlist();
