@@ -168,14 +168,15 @@ void notifyclient(client *c)
 	
 	XConfigureEvent v = {0};
 	v.type = ConfigureNotify;
+	v.display = dis;
 	v.event = c->w;
 	v.window = c->w;
 	v.x = a.x;
 	v.y = a.y;
 	v.width = a.width;
 	v.height = a.height;
-	v.border_width = 0;
-	v.above = None;
+	v.border_width = a.border_width;
+	v.above = DefaultRootWindow(dis);
 	v.override_redirect = False;
 	XSendEvent(dis, c->w, False, StructureNotifyMask, (XEvent *)&v);
 }
@@ -245,13 +246,20 @@ client* getumapclient(Window *w)
 
 void resizeclient(client *c)
 {
+#ifdef DEBUG
+	XWindowAttributes a;
+	XGetWindowAttributes(dis, c->w, &a);
+	fprintf(stdout, "resize 0x%lx: %dx%d+%d+%d -> %dx%d+%d+%d\n",
+			c->w, a.width, a.height, a.x, a.y, x, y, offx, offy);
+#endif
+
 	XMoveResizeWindow(dis, c->w, offx, offy, x, y);
+
 	notifyclient(c);
 }
 
 void focusclient(client *c)
 {
-	// XMoveResizeWindow(dis, c->w, offx, offy, x, y);
 	// resizeclient(c);
 	
 	XRaiseWindow(dis, c->w);
@@ -483,7 +491,6 @@ void destroynotify(XEvent *e)
 		fflush(stdout);
 #endif
 		if (cfoc && cfoc->w)
-			// XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
 			resizeclient(cfoc);
 
 		return;
@@ -553,7 +560,16 @@ void maprequest(XEvent *e)
 		return;
 
 	client *c;
-	if (getclient(&e->xmaprequest.window))
+	Window t;
+	XGetTransientForHint(dis, e->xmaprequest.window, &t);
+	if (t)
+	{
+		// window is a dialog
+
+		XMapWindow(dis, e->xmaprequest.window);
+		return;
+	}
+	else if (getclient(&e->xmaprequest.window))
 	{
 		// client already mapped
 		return;
@@ -596,7 +612,6 @@ void maprequest(XEvent *e)
 		XMapWindow(dis, dock->w);
 
 		if (cfoc && cfoc->w)
-			// XMoveResizeWindow(dis, cfoc->w, offx, offy, x, y);
 			resizeclient(cfoc);
 	}
 	else
@@ -624,8 +639,15 @@ void maprequest(XEvent *e)
 			if (cfoc == ctail)
 				ctail = c;
 		}
+
+		// set WM_STATE
+		Atom s = XInternAtom(dis, "WM_STATE", False);
+		unsigned long d[] = { NormalState, None };
+		XChangeProperty(dis, c->w, s, s, 32, PropModeReplace,
+						(unsigned char *)d, 2);
+		
 		XMapWindow(dis, c->w);
-		// XSelectInput(dis, c->w, EnterWindowMask);
+		XSync(dis, False);
 		resizeclient(c);
 		focusclient(c);
 
