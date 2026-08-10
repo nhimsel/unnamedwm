@@ -567,6 +567,7 @@ void maprequest(XEvent *e)
 		// window is a dialog
 
 		XMapWindow(dis, e->xmaprequest.window);
+		XSetInputFocus(dis, e->xmaprequest.window, RevertToPointerRoot, CurrentTime);
 		return;
 	}
 	else if (getclient(&e->xmaprequest.window))
