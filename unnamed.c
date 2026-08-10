@@ -55,7 +55,7 @@ int maxy = 0;			// display's y range
 client *chead = NULL;	// head of doubly-linked list of visible windows
 client *ctail = NULL;	// tail of doubly-linked list of visible windows
 client *cfoc = NULL;	// currently-focused window
-client *umap = NULL;	// unmapped windows; treated as singly-linked
+client *umap = NULL;	// head of doubly-linked list of unmapped windows
 client *dock = NULL;	// dock/taskbar window; limited to one
 
 void suicide(char *s)
@@ -519,7 +519,9 @@ void destroynotify(XEvent *e)
 		if (c->w == DefaultRootWindow(dis)) return;
 
 		if (c->p) c->p->n = c->n;
-		else umap = c->n;
+		else umap = umap->n;
+		
+		if (c->n) c->n->p = c->p;
 	}
 	
 	free(c);
@@ -578,8 +580,13 @@ void maprequest(XEvent *e)
 	else if ((c = getumapclient(&e->xmaprequest.window)))
 	{
 		// client had been unmapped
-		if (c == umap) umap = NULL;
-		else c->p->n = c->n;
+		if (c == umap) umap = umap->n;
+		else {
+			if (c->p) c->p->n = c->n;
+			else umap = umap->n;
+			
+			if (c->n) c->n->p = c->p;
+		}
 
 		c->n = NULL;
 		c->p = NULL;
@@ -699,9 +706,13 @@ void unmapnotify(XEvent *e)
 		{
 			client *u = umap;
 			while (u->n) u=u->n;
+
 			u->n=c;
+			c->p=u;
 		}
 	}
+
+	buildclientlist();
 }
 
 static eventhandler handler[LASTEvent] = {
