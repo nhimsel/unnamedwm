@@ -41,6 +41,7 @@ struct atoms
 	Atom netwmwindowtype;
 	Atom netwmwindowtypedock;
 	Atom netwmwindowtypenormal;
+	Atom networkarea;
 	Atom utf8string;
 } atoms;
 
@@ -152,6 +153,8 @@ void rootatoms(void)
 			dis, "_NET_WM_WINDOW_TYPE_DOCK", False),
 		atoms.netwmwindowtypenormal = XInternAtom(
 			dis, "_NET_WM_WINDOW_TYPE_NORMAL", False),
+		atoms.networkarea = XInternAtom(
+			dis, "_NET_WORKAREA", False),
 		atoms.utf8string = XInternAtom(dis, "UTF8_STRING", False)
 	};
 
@@ -366,6 +369,11 @@ void updatedockoffset(XWindowAttributes a)
 		offy = 0;
 		y = maxy;
 	}
+
+	// update _NET_WORKAREA
+	long wa[] = { offx, offy, x, y };
+	XChangeProperty(dis, DefaultRootWindow(dis), atoms.networkarea, XA_CARDINAL,
+					32, PropModeReplace, (unsigned char *)wa, 4);
 }
 
 Atom getwindowtype(Window *w)
