@@ -570,17 +570,7 @@ void maprequest(XEvent *e)
 		return;
 
 	client *c;
-	Window t;
-	XGetTransientForHint(dis, e->xmaprequest.window, &t);
-	if (t)
-	{
-		// window is a dialog
-
-		XMapWindow(dis, e->xmaprequest.window);
-		XSetInputFocus(dis, e->xmaprequest.window, RevertToPointerRoot, CurrentTime);
-		return;
-	}
-	else if (getclient(&e->xmaprequest.window))
+	if (getclient(&e->xmaprequest.window))
 	{
 		// client already mapped
 		return;
@@ -608,6 +598,7 @@ void maprequest(XEvent *e)
 		c->p = NULL;
 	}
 
+	// Window t;
 	Atom w = getwindowtype(&c->w);
 	if (w == atoms.netwmwindowtypedock)
 	{
@@ -630,6 +621,18 @@ void maprequest(XEvent *e)
 		if (cfoc && cfoc->w)
 			resizeclient(cfoc);
 	}
+	/*
+	else if (XGetTransientForHint(dis, c->w, &t) && t)
+	{
+		// window is a dialog
+
+		XSelectInput(dis, c->w, EnterWindowMask);
+		XMapWindow(dis, e->xmaprequest.window);
+		XSetInputFocus(dis, e->xmaprequest.window,
+					   RevertToPointerRoot, CurrentTime);
+		return;
+	}
+	*/
 	else
 	{
 		// insert window into list
