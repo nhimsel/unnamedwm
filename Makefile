@@ -1,20 +1,21 @@
 SRCS = $(wildcard *.c)
 OBJS = $(SRCS:.c=.o)
+HEADS = $(wildcard *.h)
 
 TARGET = unnamed
 CC = clang
-CFLAGS = -std=c99 -pedantic -Wall -Werror -O2
+CFLAGS = -std=c99 -O2
 LDFLAGS = -lX11
 
 all: $(TARGET)
 
-debug: CFLAGS += -g -O0 -DDEBUG
+debug: CFLAGS += -g -O0 -DDEBUG -pedantic -Wall -Werror
 debug: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $(TARGET)
 
-%.o: %.c
+%.o: %.c $(HEADS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
