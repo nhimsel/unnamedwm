@@ -9,8 +9,8 @@ TODO: use a config file
 #include <X11/Xos.h>
 #include <X11/keysym.h>
 #include <stdio.h>
-#include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define name "unnamed"
 #define exec(s) if (fork() == 0) {							\
@@ -59,6 +59,10 @@ client *cfoc = NULL;	// currently-focused window
 client *umap = NULL;	// head of doubly-linked list of unmapped windows
 client *dock = NULL;	// dock/taskbar window; limited to one
 
+#include "keys.h"
+
+extern struct key keylist[];
+
 void suicide(char *s)
 {
 	fprintf(stderr, "%s\n", s);
@@ -90,32 +94,19 @@ void keyhook(void)
 {
 	// hook necessary keybinds
 	// will be rewritten once config file is implemented
+
+	#define getkey(x) XKeysymToKeycode(dis, XStringToKeysym(x))
 	
 	unsigned int nullmod[] = {0, LockMask, NumlockMask, NumlockMask | LockMask};
 
-	#define mod Mod4Mask
-	#define key(x) XKeysymToKeycode(dis, XStringToKeysym(x))
-
-	struct key {
-		KeyCode key;
-		int shiftmod;
-	};
-
-	struct key keys[] = {{key("Escape"), 0}, {key("r"), 0}, {key("w"), 0},
-				  {key("h"), 0}, {key("l"), 0},{key("H"), 1}, {key("L"), 1}};
-	
 	for (int i=0; i<lengthof(nullmod); i++)
 	{
-		for (int j=0; j<lengthof(keys); j++)
+		for (int j=0; j<lengthof(keylist); j++)
 		{
-			if (keys[j].shiftmod)
-				XGrabKey(dis, keys[j].key, mod | nullmod[i] | ShiftMask,
-						 DefaultRootWindow(dis), True,
-						 GrabModeAsync, GrabModeAsync);
-			else
-				XGrabKey(dis, keys[j].key, mod | nullmod[i],
-						 DefaultRootWindow(dis), True,
-						 GrabModeAsync, GrabModeAsync);
+			XGrabKey(dis, getkey(keylist[j].key),
+					 keylist[j].modifier | nullmod[i],
+					 DefaultRootWindow(dis), True,
+					 GrabModeAsync, GrabModeAsync);
 		}
 	}
 }
@@ -539,27 +530,44 @@ void destroynotify(XEvent *e)
 
 void keypress(XEvent *e)
 {
-	// note mod is declared in keyhook. will be moved to config once implemented
-	KeySym k = XLookupKeysym(&e->xkey, 0);
-	int s = e->xkey.state;
+	// note mod is declared in keys.h. will be moved to config once implemented
+	KeyCode k = e->xkey.keycode;
+	unsigned int s = e->xkey.state &
+		(ShiftMask | ControlMask | Mod1Mask | Mod4Mask);
 	
-	switch (k) {
-	case XK_r:
-		exec("rofi -show drun");
+	int i = 0, l = -1;
+	for (; i<(l = lengthof(keylist)); i++)
+		if (getkey(keylist[i].key) == k &&
+			s == keylist[i].modifier)
+			break;
+
+	if (i == l) return;
+
+	switch(keylist[i].action) {
+	case(EXIT):
+		suicide("exiting!");
 		break;
-	case XK_w:
+	case(KILL):
 		killcurrentclient();
 		break;
-	case XK_h:
-		if (s & ShiftMask) moveprev();
-		else focusprev();
+	case(FOCUS):
+		if (! strcmp(keylist[i].data, "left"))
+			focusprev();
+		else if (! strcmp(keylist[i].data, "right"))
+			focusnext();
+		else
+			fprintf(stderr, "cannot focus direction %s\n", keylist[i].data);
 		break;
-	case XK_l:
-		if (s & ShiftMask) movenext();
-		else focusnext();
+	case(MOVE):
+		if (! strcmp(keylist[i].data, "left"))
+			moveprev();
+		else if (! strcmp(keylist[i].data, "right"))
+			movenext();
+		else
+			fprintf(stderr, "cannot move direction %s\n", keylist[i].data);
 		break;
-	case XK_Escape:
-		suicide("exiting!");
+	case(EXEC):
+		exec(keylist[i].data);
 		break;
 	}
 }
