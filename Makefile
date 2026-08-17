@@ -3,8 +3,8 @@ OBJS = $(SRCS:.c=.o)
 HEADS = $(wildcard *.h)
 
 TARGET = unnamed
-CC = clang
-CFLAGS = -std=c99 -O2
+CC ?= clang
+CFLAGS ?= -std=c99 -O2
 LDFLAGS = -lX11
 
 all: $(TARGET)

@@ -1,0 +1,30 @@
+* unnamedwm
+
+an opinionated tabbed wm
+
+** Description
+
+unnamedwm is an X11 window manager.
+it was developed primarily as a hobby project and for personal use.
+as such, there are some things most window managers support that this does not.
+a primary example being transient, or floating, windows.
+
+** Configuration
+
+a config file is in the todo list.
+
+for now, keybinds can be configured in ~keys.h~.
+some basic keybinds are included already as an example.
+
+** Compilation
+
+compilation requires a c compiler and the x11 headers.
+
+the makefile is designed for GNU make.
+a release build can be compiled with ~make~.
+
+this project should be able to compile with both gcc and clang.
+to override the compiler, set the ~CC~ env var.
+likewise, to override compiler flags, set the ~CFLAGS~ env var.
+
+a debug build can be compiled with ~make debug~.
