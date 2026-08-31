@@ -1,5 +1,6 @@
 /*
 TODO: implement virtual desktops + EWMH for them
+TODO: support fullscreen (requested by user or app)
 TODO: use a config file
 */
 
