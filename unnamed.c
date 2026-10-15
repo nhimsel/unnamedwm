@@ -9,6 +9,7 @@ TODO: use a config file
 #include <X11/Xatom.h>
 #include <X11/Xos.h>
 #include <X11/keysym.h>
+#include <X11/cursorfont.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,7 +47,8 @@ struct atoms
 	Atom utf8string;
 } atoms;
 
-Display *dis = NULL;	//x display
+Display *dis = NULL;	// x display
+Cursor curs;			// x cursor
 int scr = 0;			// x screen no
 int x = 0;				// workable x range
 int y = 0;				// workable y range
@@ -89,6 +91,20 @@ void checkwm(void)
 	XSelectInput(dis, DefaultRootWindow(dis),
 				 SubstructureRedirectMask | SubstructureNotifyMask);
 	XSync(dis, False);
+}
+
+void setcursor(void)
+{
+	curs = XCreateFontCursor(dis, XC_left_ptr);
+	if (curs != None)
+	{
+		XDefineCursor(dis, DefaultRootWindow(dis), curs);
+		XFlush(dis);
+	}
+#ifdef DEBUG
+	else
+		fprintf(stderr, "Failed to set the cursor.\n");
+#endif
 }
 
 void keyhook(void)
@@ -756,6 +772,8 @@ int main(int argc, char *argv[])
 	maxx = x =  DisplayWidth(dis, scr);
 	maxy  = y =  DisplayHeight(dis, scr);
 	XEvent e;
+
+	setcursor();
 
 	keyhook();
 
